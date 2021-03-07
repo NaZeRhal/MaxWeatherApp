@@ -6,6 +6,7 @@ import android.app.Dialog
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.location.Location
 import android.location.LocationManager
 import android.net.Uri
@@ -22,6 +23,7 @@ import com.example.maxweatherapp.databinding.ActivityMainBinding
 import com.example.maxweatherapp.models.WeatherResponse
 import com.example.maxweatherapp.network.WeatherService
 import com.google.android.gms.location.*
+import com.google.gson.Gson
 import com.karumi.dexter.Dexter
 import com.karumi.dexter.MultiplePermissionsReport
 import com.karumi.dexter.PermissionToken
@@ -41,6 +43,7 @@ import java.util.*
 class MainActivity : AppCompatActivity() {
     private lateinit var mFusedLocationClient: FusedLocationProviderClient
     private lateinit var binding: ActivityMainBinding
+    private lateinit var mSharedPreferences: SharedPreferences
 
     private var mProgressDialog: Dialog? = null
 
@@ -50,6 +53,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        mSharedPreferences = getSharedPreferences(Constants.PREFERENCE_NAME, Context.MODE_PRIVATE)
 
         if (!isLocationEnabled()) {
             Toast.makeText(
@@ -122,7 +126,13 @@ class MainActivity : AppCompatActivity() {
                         hideProgressDialog()
 
                         val weatherList: WeatherResponse? = response.body()
-                        setupUi(weatherList)
+
+                        val weatherResponseJsonString = Gson().toJson(weatherList)
+                        val editor = mSharedPreferences.edit()
+                        editor.putString(Constants.WEATHER_RESPONSE_DATA, weatherResponseJsonString)
+                        editor.apply()
+
+                        setupUi()
                         Log.i("RESP_RES", "$weatherList")
                     } else {
                         when (response.code()) {
@@ -213,10 +223,14 @@ class MainActivity : AppCompatActivity() {
         mProgressDialog?.dismiss()
     }
 
-    private fun setupUi(weatherList: WeatherResponse?) {
-        if (weatherList != null) {
-            for (i in weatherList.weather.indices) {
+    private fun setupUi() {
 
+        val weatherResponseJsonString =
+            mSharedPreferences.getString(Constants.WEATHER_RESPONSE_DATA, "")
+        if (!weatherResponseJsonString.isNullOrEmpty()) {
+            val weatherList =
+                Gson().fromJson(weatherResponseJsonString, WeatherResponse::class.java)
+            for (i in weatherList.weather.indices) {
                 with(binding) {
                     with(weatherList) {
                         tvMain.text = weather[i].main
