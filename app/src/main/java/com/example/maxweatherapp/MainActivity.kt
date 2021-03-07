@@ -13,9 +13,12 @@ import android.os.Bundle
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
+import android.view.Menu
+import android.view.MenuItem
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.example.maxweatherapp.databinding.ActivityMainBinding
 import com.example.maxweatherapp.models.WeatherResponse
 import com.example.maxweatherapp.network.WeatherService
 import com.google.android.gms.location.*
@@ -29,15 +32,22 @@ import retrofit2.Callback
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.text.SimpleDateFormat
+import java.time.Instant.ofEpochMilli
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.*
 
 class MainActivity : AppCompatActivity() {
     private lateinit var mFusedLocationClient: FusedLocationProviderClient
+    private lateinit var binding: ActivityMainBinding
 
     private var mProgressDialog: Dialog? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
@@ -112,6 +122,7 @@ class MainActivity : AppCompatActivity() {
                         hideProgressDialog()
 
                         val weatherList: WeatherResponse? = response.body()
+                        setupUi(weatherList)
                         Log.i("RESP_RES", "$weatherList")
                     } else {
                         when (response.code()) {
@@ -140,6 +151,7 @@ class MainActivity : AppCompatActivity() {
 
     private val mLocationCallback = object : LocationCallback() {
         override fun onLocationResult(locationResult: LocationResult) {
+            Log.i("RESP_RES", "onLocationResult: callback")
             val mLastLocation: Location = locationResult.lastLocation
             val lat = mLastLocation.latitude
             val lon = mLastLocation.longitude
@@ -155,11 +167,11 @@ class MainActivity : AppCompatActivity() {
     private fun requestLocationData() {
         val mLocationRequest = LocationRequest.create()
         mLocationRequest.priority = LocationRequest.PRIORITY_HIGH_ACCURACY
-
+        Log.i("RESP_RES", "requestLocationData: request")
         mFusedLocationClient.requestLocationUpdates(
             mLocationRequest,
             mLocationCallback,
-            Looper.getMainLooper()
+            Looper.myLooper()!!
         )
     }
 
@@ -200,4 +212,125 @@ class MainActivity : AppCompatActivity() {
     private fun hideProgressDialog() {
         mProgressDialog?.dismiss()
     }
+
+    private fun setupUi(weatherList: WeatherResponse?) {
+        if (weatherList != null) {
+            for (i in weatherList.weather.indices) {
+
+                with(binding) {
+                    with(weatherList) {
+                        tvMain.text = weather[i].main
+                        tvMainDescription.text = weather[i].description
+                        val tempUnit = getTempUnit(application.resources.configuration.toString())
+                        val speedUnit = getSpeedUnit(application.resources.configuration.toString())
+                        val temp = "${main.temp} $tempUnit"
+                        val feelsLike = "${main.feels_like} $tempUnit"
+                        val humidity = "${main.humidity} \u0025"
+                        val pressure = "${main.pressure / 10} kPa"
+                        val windSpeed = "${wind.speed} $speedUnit"
+                        tvTemp.text = temp
+                        tvFeelsLike.text = feelsLike
+                        tvHumidity.text = humidity
+                        tvPressure.text = pressure
+                        tvSpeed.text = windSpeed
+                        tvWidDirection.text = getWindDirection(wind.deg)
+                        tvName.text = name
+                        tvCountry.text = sys.country
+                        tvSunriseTime.text = unixTime(sys.sunrise)
+                        tvSunsetTime.text = unixTime(sys.sunset)
+
+                        setupMainIcon(weather[i].icon)
+
+                    }
+                }
+            }
+        }
+    }
+
+    private fun getTempUnit(locale: String): String {
+        return when (locale) {
+            "US" -> "\u2109"
+            "LR" -> "\u2109"
+            "MM" -> "\u2109"
+            "UK" -> "\u2109"
+            else -> "\u2103"
+        }
+    }
+
+    private fun getSpeedUnit(locale: String): String {
+        return when (locale) {
+            "US" -> "mph"
+            "LR" -> "mph"
+            "MM" -> "mph"
+            "UK" -> "mph"
+            else -> "m/s"
+        }
+    }
+
+    private fun getWindDirection(degree: Double): String {
+        return when (degree) {
+            in 0.0..45.0 -> "NNE"
+            in 45.1..90.0 -> "ENE"
+            in 90.1..135.0 -> "ESE"
+            in 135.1..180.0 -> "SSE"
+            in 180.1..225.0 -> "SSW"
+            in 225.1..270.0 -> "WSW"
+            in 270.1..315.0 -> "WNW"
+            in 315.1..360.0 -> "NNW"
+            else -> ""
+        }
+    }
+
+    private fun setupMainIcon(icon: String) {
+        with(binding.ivMain) {
+            when (icon) {
+                "01d" -> setImageResource(R.drawable.sunny)
+                "02d" -> setImageResource(R.drawable.cloud)
+                "03d" -> setImageResource(R.drawable.cloud)
+                "04d" -> setImageResource(R.drawable.cloud)
+                "04n" -> setImageResource(R.drawable.cloud)
+                "10d" -> setImageResource(R.drawable.rain)
+                "11d" -> setImageResource(R.drawable.storm)
+                "13d" -> setImageResource(R.drawable.snowflake)
+                "01n" -> setImageResource(R.drawable.cloud)
+                "02n" -> setImageResource(R.drawable.cloud)
+                "03n" -> setImageResource(R.drawable.cloud)
+                "10n" -> setImageResource(R.drawable.cloud)
+                "11n" -> setImageResource(R.drawable.rain)
+                "13n" -> setImageResource(R.drawable.snowflake)
+                else -> setImageResource(R.drawable.sunny)
+            }
+        }
+    }
+
+    private fun unixTime(timex: Long): String {
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val time = ofEpochMilli(timex * 1000L).atZone(ZoneId.systemDefault()).toLocalTime()
+            val df = DateTimeFormatter.ofPattern("HH:mm")
+            df.format(time)
+        } else {
+            val date = Date(timex * 1000L)
+            val sdf = SimpleDateFormat("HH:mm")
+            sdf.timeZone = TimeZone.getDefault()
+            sdf.format(date)
+        }
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.menu_main, menu)
+        return super.onCreateOptionsMenu(menu)
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.menu_action_refresh -> {
+                Log.i("MENU_CL", "onOptionsItemSelected: clicked")
+                requestLocationData()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
+
+    }
+
 }
